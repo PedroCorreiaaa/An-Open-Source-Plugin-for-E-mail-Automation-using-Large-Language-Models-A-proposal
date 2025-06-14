@@ -17,7 +17,7 @@ Once the add-on is partially developed, it will be published on Google Workspace
 ## ✨ Add-on Features
 
 
-**1. Categorized Mail Box**
+### 1. Categorized Mail Box
 
 **Gmail:**
 <p>
@@ -30,7 +30,7 @@ Once the add-on is partially developed, it will be published on Google Workspace
     <img src="./assets/caixa de entrada.png" width="500"/>
 </p>
 
-**2. Response Generated for the email**
+### 2. Response Generated for the email
 
 **Gmail:**
 <p>
@@ -42,7 +42,7 @@ Once the add-on is partially developed, it will be published on Google Workspace
     <img src="./assets/resposta gerada.png" width="500"/>
 </p>
 
-**3. Email after the generated response has been validated**
+### 3. Email after the generated response has been validated
 
 **Gmail:**
 <p>
