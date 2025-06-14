@@ -1,8 +1,14 @@
 # 📩 Open Source Plugin for E-mail Automation using Large Language Models A proposal
 
+## Architecture Diagram
+
+<p align="center">
+    <img src="./assets/diagrama arquitetura.jpg" width="500"/>
+</p>
+
 ## 📚 Project Context
 
-This project aims to develop an add-on for email services, initially targeting Gmail. The add-on will have the capability to categorize emails using keyword matching and generate responses based on Retrieval-Augmented Generation (RAG) through Large Language Models (LLMs). It will also provide the ability to create a timeline tracking each email from categorization to response, including stages such as generated response and validated response. Finally, this system is intended to be integrated with a government institution, specifically the Municipality of Viana do Castelo.
+This project aims to develop an add-on for email services, initially targeting Gmail. The add-on will have the capability to categorize emails using keyword matching and generate responses based on Retrieval-Augmented Generation (RAG) through Large Language Models (LLMs). It will also provide the ability to create a timeline tracking each email from categorization to response, including stages such as generated response and validated response. Finally, this system is intended to be integrated with a government institution, specifically the Municipality of the north of Portugal.
 
 ## 🚀 Project Deploy
 
