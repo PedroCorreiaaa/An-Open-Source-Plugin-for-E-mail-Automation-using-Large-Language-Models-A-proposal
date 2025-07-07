@@ -3,15 +3,17 @@ function buildAddOn(e) {
 
   if (e.gmail && e.gmail.messageId) {
     return showEmailContextCard(e);
-  } else {
+  } else if(e.label){
+    return sh
+  }else{
     return showHomePage();
   }
 }
-
 function showHomePage() {
   const card = CardService.newCardBuilder();
 
-  const section = CardService.newCardSection()
+  // Secção de Auto-Resposta
+  const autoReplySection = CardService.newCardSection()
     .addWidget(CardService.newTextParagraph().setText("Clique no botão abaixo para iniciar a auto-resposta agora e a cada hora."))
     .addWidget(
       CardService.newTextButton()
@@ -19,12 +21,55 @@ function showHomePage() {
         .setOnClickAction(CardService.newAction().setFunctionName("startAutoReply"))
     );
 
+  // Secção de Estatísticas
   const statsSection = buildStatsSection();
-  card.addSection(section).addSection(statsSection);
+
+  // Secção de Gestão de Categorias
+  const categorySection = CardService.newCardSection()
+    .addWidget(CardService.newTextParagraph().setText("📁 <b>Gerir Palavras-chave por Categoria</b>"));
+
+  const categorias = getCategorias();
+  categorias.forEach(cat => {
+    categorySection.addWidget(
+      CardService.newTextButton()
+        .setText(`🔧 ${cat.label}`)
+        .setOnClickAction(
+          CardService.newAction()
+            .setFunctionName("abrirGestaoCategoria")
+            .setParameters({ labelName: cat.label })
+        )
+    );
+  });
+
+  // Botão Suporte que abre a página contexto.html numa nova aba
+  const supportButton = CardService.newTextButton()
+    .setText("🛠️ Info")
+    .setOpenLink(
+      CardService.newOpenLink()
+        .setUrl("https://medium.com/@pedromartinscorreia/ai4apgovernance-gmail-add-on-6d1cff48d259") // URL da story no Medium
+        .setOpenAs(CardService.OpenAs.NEW_TAB)
+    );
+
+
+  // Colocar o botão de suporte em uma nova seção, fixá-lo visualmente não é possível no CardService,
+  // mas posicionar no fim do card para ficar visível.
+  const supportSection = CardService.newCardSection()
+    .addWidget(supportButton);
+
+  card
+    .addSection(autoReplySection)
+    .addSection(statsSection)
+    .addSection(categorySection)
+    .addSection(supportSection);
 
   return [card.build()];
 }
 
+
+function abrirGestaoCategoria(e) {
+  const label = e.parameters.labelName;
+  return showCategoryKeywordManager(label);
+}
 
 function showEmailContextCard(e) {
   const messageId = e.gmail.messageId;
@@ -51,7 +96,7 @@ function showEmailContextCard(e) {
       // Botão para gerar resposta melhor
       section.addWidget(
         CardService.newTextButton()
-          .setText("♻️ Gerar uma resposta melhor")
+          .setText("♻️ Gerar uma melhor resposta")
           .setOnClickAction(CardService.newAction()
             .setFunctionName("generateBetterResponse")
             .setParameters({threadId: thread.getId()})
@@ -80,6 +125,112 @@ function showEmailContextCard(e) {
 
   return [card];
 }
+
+function showCategoryKeywordManager(labelName) {
+  const categorias = getCategorias();
+  const categoria = categorias.find(cat => cat.label === labelName);
+
+  const card = CardService.newCardBuilder()
+    .setHeader(CardService.newCardHeader().setTitle("🗂️ Gestão de Palavras-chave"))
+    .addSection(
+      CardService.newCardSection()
+        .addWidget(CardService.newTextParagraph().setText(`Categoria: <b>${labelName}</b>`))
+    );
+
+  const keywordSection = CardService.newCardSection()
+    .addWidget(CardService.newTextParagraph().setText("Palavras-chave atuais:"));
+
+  if (categoria.keywords && categoria.keywords.length > 0) {
+    categoria.keywords.forEach(keyword => {
+      keywordSection.addWidget(
+        CardService.newDecoratedText()
+          .setText(`<b><i>${keyword}</i></b>`)
+          .setWrapText(true)
+          .setButton(
+            CardService.newTextButton()
+              .setText("❌ Remover")
+              .setOnClickAction(
+                CardService.newAction()
+                  .setFunctionName("removerKeyword")
+                  .setParameters({ label: labelName, keyword })
+              )
+          )
+      );
+    });
+  } else {
+    keywordSection.addWidget(CardService.newTextParagraph().setText("_Nenhuma palavra-chave definida._"));
+  }
+
+  const inputSection = CardService.newCardSection()
+    .addWidget(
+      CardService.newTextInput()
+        .setFieldName("novaKeyword")
+        .setTitle("Adicionar nova palavra-chave")
+    )
+    .addWidget(
+      CardService.newTextButton()
+        .setText("➕ Adicionar")
+        .setOnClickAction(CardService.newAction()
+          .setFunctionName("adicionarKeyword")
+          .setParameters({ label: labelName }))
+    );
+
+  return [card.addSection(keywordSection).addSection(inputSection).build()];
+}
+
+function adicionarKeyword(e) {
+  const label = e.parameters.label;
+  const novaKeyword = e.formInput.novaKeyword;
+
+  if (!novaKeyword || novaKeyword.trim() === "") {
+    return CardService.newActionResponseBuilder()
+      .setNotification(CardService.newNotification().setText("⚠️ Insira uma palavra-chave válida."))
+      .build();
+  }
+
+  const categorias = getCategorias();
+  const categoria = categorias.find(cat => cat.label === label);
+
+  if (!categoria.keywords) categoria.keywords = [];
+
+  // Evitar duplicados
+  if (!categoria.keywords.includes(novaKeyword.trim())) {
+    categoria.keywords.push(novaKeyword.trim());
+    saveCategorias(categorias);
+  } else {
+    return CardService.newActionResponseBuilder()
+      .setNotification(CardService.newNotification().setText("⚠️ Palavra-chave já existe."))
+      .build();
+  }
+
+  // Atualiza o cartão
+  return CardService.newActionResponseBuilder()
+    .setNavigation(CardService.newNavigation().updateCard(showCategoryKeywordManager(label)[0]))
+    .setNotification(CardService.newNotification().setText(`Palavra-chave "${novaKeyword.trim()}" adicionada.`))
+    .build();
+}
+
+
+function removerKeyword(e) {
+  const label = e.parameters.label;
+  const keywordToRemove = e.parameters.keyword;
+
+  const categorias = getCategorias();
+  const categoria = categorias.find(cat => cat.label === label);
+  if (!categoria || !categoria.keywords) return;
+
+  categoria.keywords = categoria.keywords.filter(kw => kw !== keywordToRemove);
+  saveCategorias(categorias);
+
+  // Atualiza o cartão
+  return CardService.newActionResponseBuilder()
+    .setNavigation(CardService.newNavigation().updateCard(showCategoryKeywordManager(label)[0]))
+    .setNotification(CardService.newNotification().setText(`Palavra-chave "${keywordToRemove}" removida.`))
+    .build();
+}
+
+
+
 
 function generateBetterResponse(e) {
   const threadId = e.parameters.threadId;
@@ -250,13 +401,14 @@ function exportStatsAsCSV() {
 function startAutoReply() {
   deleteExistingTriggers();
   autoReplyToUnreadEmails();
+
   setHourlyTrigger();
 
   return CardService.newActionResponseBuilder()
     .setNavigation(CardService.newNavigation().updateCard(showHomePage()[0]))
-    .setNotification(CardService.newNotification().setText("Auto-resposta ativada e primeira execução concluída!"))
     .build();
 }
+
 
 function setHourlyTrigger() {
   ScriptApp.newTrigger("autoReplyToUnreadEmails").timeBased().everyHours(1).create();
@@ -313,11 +465,15 @@ function getOrCreateLabel(name) {
 
 function getEmailCategoryKeyWordMatching(content) {
   content = content.toLowerCase();
+  const categorias = getCategorias();
 
-  if (content.includes("escolar") || content.includes("ação social") || content.includes("aluno")) return ".Ação Social Escolar";
-  if (content.includes("ambiente") || content.includes("verde") || content.includes("árvore")) return ".Ambiente e Espaços Verdes";
-  if (content.includes("desporto") || content.includes("ginásio")) return ".Equipamentos Desportivos";
-  if (content.includes("feira") || content.includes("mercado")) return ".Feiras e Mercados";
+  for (const cat of categorias) {
+    for (const keyword of cat.keywords) {
+      if (content.includes(keyword.toLowerCase())) {
+        return cat.label;
+      }
+    }
+  }
 
   return ".Outro";
 }
@@ -336,7 +492,7 @@ function generateResponseFromRAG(emailContent) {
       muteHttpExceptions: true
     };
 
-    const response = UrlFetchApp.fetch("https://c67f-2001-818-da6c-9b00-89f8-62ff-d9c4-1c7b.ngrok-free.app/query_rag", options);
+    const response = UrlFetchApp.fetch("https://2286-2a01-14-136-cb20-a058-2e4-8a82-cad9.ngrok-free.app/query_rag", options);
     const json = JSON.parse(response.getContentText());
 
     if (json.error) {
@@ -344,15 +500,15 @@ function generateResponseFromRAG(emailContent) {
       return "⚠️ Não foi possível obter uma resposta baseada nos PDFs.";
     }
 
-    let resposta = json.response;
+    let respostaGerada = json.response;
     const sources = json.sources || [];
 
     if (sources.length > 0) {
       const fontesTexto = sources.map(s => `- ${s.filename}, página ${s.page}`).join("\n");
-      resposta += `\n\nFontes consultadas:\n${fontesTexto}`;
+      respostaGerada += `\n\nFontes consultadas:\n${fontesTexto}`;
     }
 
-    return resposta;
+    return respostaGerada;
 
   } catch (e) {
     Logger.log("Erro ao contactar RAG: " + e.toString());
