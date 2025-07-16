@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chatbot PDF</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="d-flex">
+        <!-- Sidebar -->
+        <nav class="sidebar bg-dark text-white p-3">
+            <h4>📂 IPVC CHATBOT</h4>
+            <form id="upload-form" enctype="multipart/form-data">
+                <label class="form-label">Enviar PDFs:</label>
+                <input type="file" name="pdfs" class="form-control mb-2" multiple required>
+                
+                <button type="submit" class="btn btn-primary w-100">Upload PDFs</button>
+            </form>
+
+            <form id="process-form" class="mt-3">
+                <label class="form-label">Modelo de Embedding:</label>
+                <select name="embedding_model" class="form-select mb-3">
+                    <option value="openai">OpenAI (CHATGPT)</option>
+                    <option value="ollama">Ollama (LLM LOCAL)</option>
+                </select>
+                
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" id="use_rag">
+                    <label class="form-check-label" for="use_rag">Usar RAG</label>
+                </div>
+
+                <button type="submit" class="btn btn-success w-100">Carregar RAG com PDF</button>
+            </form>
+        </nav>
+
+        <!-- Conteúdo Principal -->
+        <div class="content flex-grow-1 p-4" style="margin-left: 300px;"> <!-- Margin to avoid overlap with sidebar -->
+            
+            <!-- Abas -->
+            <ul class="nav nav-tabs fixed-top bg-white" style="z-index: 1050; top: 0px; left: 300px; width: calc(100% - 300px); background-color: white; box-shadow: 0 0px 0px rgb(255, 255, 255);">
+                <li class="nav-item">
+                    <a class="nav-link active" href="#" onclick="showTab(event, 'overview')">Início</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="#" onclick="showTab(event, 'chatbot')">Chatbot</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="#" onclick="showTab(event, 'pdf-view')">Visualizar PDF</a>
+                </li>
+            </ul>
+
+            <!-- Conteúdo das abas -->
+            <div id="overview" class="tab-content active">
+                <h2>📊 IPVC CHATBOT</h2>
+                <p class="lead">O projeto IPVC CHATBOT apresenta um chatbot interativo capaz de processar e interagir com documentos PDF. A ferramenta foi desenvolvida para facilitar o acesso a informações contidas em documentos PDF de forma simples e eficiente, utilizando modelos de linguagem avançados.
+                    Este projeto utiliza o Retrieval-Augmented Generation (RAG) para obter respostas mais precisas e confiáveis face ao tema que o utilizador forneça.
+                </p>
+
+                <h3 class="mt-1">Como funciona?</h3>
+                <div class="d-flex flex-column align-items-center">
+                    <p class="lead">
+                        As imagens a seguir ilustram os principais aspetos do sistema, incluindo a arquitetura, o fluxo de dados, o desempenho do modelo e a integração com PDFs. Cada uma dessas etapas é fundamental para entender o funcionamento do sistema e como é processada toda a informação.
+                    </p>
+                    <figure class="mb-3">
+                        <img src="{{ url_for('static', filename='images/graph1.png') }}" class="img-fluid" style="width: 500px; height: auto;" alt="Arquitetura do Sistema">
+                        <figcaption>Arquitetura do Sistema</figcaption>
+                    </figure>
+                    <figure class="mb-3">
+                        <img src="{{ url_for('static', filename='images/graph2.png') }}" class="img-fluid" style="width: 500px; height: auto;" alt="Fluxo de Dados">
+                        <figcaption>Fluxo de Dados</figcaption>
+                    </figure>
+                    <figure class="mb-3">
+                        <img src="{{ url_for('static', filename='images/graph3.png') }}" class="img-fluid" style="width: 500px; height: auto;" alt="Desempenho do Modelo">
+                        <figcaption>Processamento de um PDF</figcaption>
+                    </figure>
+                    <figure class="mb-3">
+                        <img src="{{ url_for('static', filename='images/graph4.png') }}" class="img-fluid" style="width: 500px; height: auto;" alt="Integração com PDFs">
+                        <figcaption>Integração do RAG com PDFs</figcaption>
+                    </figure>
+                </div>
+                
+                  
+            </div>
+                  
+
+            <div id="chatbot" class="tab-content">
+                <h2>💬 Chatbot</h2>
+                <div id="chat-box" class="border p-3 mb-3 bg-light"></div>
+            
+                <!-- Container fixo para o campo de entrada -->
+                <div id="user-input-container" class="input-group">
+                    <input type="text" id="user-input" class="form-control" placeholder="Envie mensagem...">
+                    <button class="btn btn-success" onclick="sendMessage()">Enviar</button>
+                </div>
+            </div>
+
+            <div id="pdf-view" class="tab-content">
+                <h2>📖 Visualizar PDFs</h2>
+                <ul id="pdf-list" class="list-group"></ul>
+                <iframe id="pdf-frame" class="w-100 mt-3" style="height: 500px; display: none;"></iframe>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script>
+        function fetchPDFList() {
+            fetch("/list_pdfs")
+                .then(response => response.json())
+                .then(data => {
+                    let pdfList = document.getElementById("pdf-list");
+                    pdfList.innerHTML = "";
+                    let pdfFrame = document.getElementById("pdf-frame");
+                    
+                    data.pdfs.forEach(pdf => {
+                        let listItem = document.createElement("li");
+                        listItem.className = "list-group-item d-flex justify-content-between align-items-center";
+
+                        listItem.innerHTML = `
+                            ${pdf} 
+                            <div>
+                                <button class="btn btn-sm btn-secondary" onclick="viewPDF('${pdf}')">👁️ Visualizar</button>
+                                <a href="/download/${pdf}" class="btn btn-sm btn-primary">📥 Download</a>
+                            </div>
+                        `;
+
+                        pdfList.appendChild(listItem);
+                    });
+                })
+                .catch(error => console.error("Erro ao buscar PDFs:", error));
+        }
+
+        function viewPDF(pdf) {
+            let pdfFrame = document.getElementById("pdf-frame");
+            pdfFrame.src = `/download/${pdf}`;
+            pdfFrame.style.display = "block";
+        }
+
+        document.getElementById("upload-form").addEventListener("submit", function(event) {
+            event.preventDefault();
+            let formData = new FormData(this);
+
+            fetch("/upload", { method: "POST", body: formData })
+                .then(response => response.json())
+                .then(data => {
+                    alert(data.message);
+                    fetchPDFList();
+                })
+                .catch(error => console.error("Erro ao enviar PDFs:", error));
+        });
+
+        document.getElementById("process-form").addEventListener("submit", function(event) {
+            event.preventDefault();
+            let formData = new FormData(this);
+
+            fetch("/process_pdfs", { method: "POST", body: formData })
+                .then(response => response.json())
+                .then(data => alert(data.message))
+                .catch(error => console.error("Erro ao processar PDFs:", error));
+        });
+
+        document.getElementById("user-input").addEventListener("keypress", function(event) {
+            if (event.key === "Enter") {
+                event.preventDefault(); 
+                sendMessage(); 
+            }
+        });
+
+
+        function sendMessage() {
+    let userInput = document.getElementById("user-input").value;
+    if (!userInput) return;
+
+    // Get the selected embedding model
+    let embeddingModel = document.querySelector('select[name="embedding_model"]').value;
+    let useRagValue = document.getElementById("use_rag").checked ? 1 : 0;
+
+    let chatBox = document.getElementById("chat-box");
+    chatBox.innerHTML += `<p><b>Eu:</b> ${userInput}</p>`;
+
+        fetch("/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                question: userInput,
+                embedding_model: embeddingModel,
+                use_rag: useRagValue
+            })
+        })
+        .then(response => response.json())
+            .then(data => {
+                let chatBox = document.getElementById("chat-box");
+                let responseHtml = `<p><b>Bot:</b> ${data.response}</p>`;
+
+                if (data.sources && data.sources.length > 0) {
+                    responseHtml += "<p><b>Fontes:</b></p><ul>";
+                    data.sources.forEach(source => {
+                        responseHtml += `<li>${source.filename} (página ${source.page})</li>`;
+                    });
+                    responseHtml += "</ul>";
+                }
+
+                chatBox.innerHTML += responseHtml;
+                document.getElementById("user-input").value = "";
+                chatBox.scrollTop = chatBox.scrollHeight;
+            })
+        .catch(error => console.error("Erro no chatbot:", error));
+    }
+
+        function showTab(event, tab) {
+            document.querySelectorAll(".tab-content").forEach(div => div.style.display = "none");
+            document.getElementById(tab).style.display = "block";
+            document.querySelectorAll(".nav-link").forEach(link => link.classList.remove("active"));
+            event.target.classList.add("active");
+
+            if (tab === "pdf-view") fetchPDFList();
+            if (tab === "chatbot") {
+                let chatBox = document.getElementById("chat-box");
+                if (!chatBox.innerHTML) { // Garante que só exibe se estiver vazio
+                    chatBox.innerHTML = `<p><b>Bot:</b> Olá, seja bem-vindo ao CHATBOT do IPVC. Como o posso ajudar hoje?</p>`;
+                }
+            }
+        }
+        document.addEventListener("DOMContentLoaded", function () {
+            showTab(event, 'overview');
+            });
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

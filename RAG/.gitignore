@@ -1,0 +1,7 @@
+.env
+data/faiss_index_ollama
+data/faiss_index_openai
+data/raw_pdfs
+**/__pycache__/
+
+

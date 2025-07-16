@@ -1,0 +1,171 @@
+/* Resetando margem e preenchimento */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html, body {
+    height: 100%;
+    font-family: Arial, sans-serif;
+}
+
+/* Estilos para a barra lateral */
+.sidebar {
+    width: 300px;
+    height: 100vh;
+    position: fixed;
+    left: 0;
+    top: 0;
+    background-color: #1f1f1f;
+    padding-top: 20px;
+    color: white;
+    z-index: 1000; /* Garante que a sidebar fique acima do conteúdo */
+}
+
+.sidebar h4 {
+    margin-bottom: 20px;
+}
+
+.sidebar .form-label {
+    font-weight: bold;
+}
+
+/* Estilos para o conteúdo principal */
+.content {
+    margin-left: 300px; /* Espaço para a sidebar */
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background-color: #fff;
+    position: relative;
+    overflow: hidden; /* Evita que o conteúdo ultrapasse os limites da tela */
+}
+
+figure {
+    text-align: center; /* Alinha a legenda no centro */
+}
+
+figcaption {
+    font-size: 14px; /* Tamanho da fonte */
+    color: #333; /* Cor da fonte */
+    font-style: italic; /* Deixa o texto em itálico */
+    margin-top: 10px; /* Espaço entre a imagem e a legenda */
+}
+
+/* Estilo adicional se quiser um fundo para a legenda */
+figure {
+    background-color: #f8f8f8; /* Cor de fundo */
+    padding: 15px; /* Espaçamento interno */
+    border-radius: 10px; /* Cantos arredondados */
+    box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1); /* Sombra para destacar */
+    margin-bottom: 20px; /* Espaço entre as figuras */
+}
+
+/* Estilos para as abas de navegação */
+.nav-tabs .nav-link {
+    cursor: pointer;
+}
+
+/* Estilos para a área de conteúdo das abas */
+.tab-content {
+    display: none;
+    flex-grow: 1; /* Garante que o conteúdo ocupe o espaço disponível */
+}
+
+/* Ajustando a área do chat para preencher o espaço disponível */
+#chat-box {
+    flex-grow: 1; /* O chat agora ocupa o restante do espaço disponível */
+    padding: 20px;
+    background-color: #f8f9fa;
+    border-radius: 5px;
+    overflow-y: auto;
+    margin-bottom: 10px; /* Espaço para separar do prompt */
+    height: calc(100vh - 250px); /* Subtrai a altura da barra lateral e o campo de entrada */
+    width: calc(100% - 0px); /* Garante que a largura do chat não sobreponha a sidebar */
+}
+
+/* Container fixo para o campo de entrada */
+#user-input-container {
+    width: 100%;
+}
+
+#user-input {
+    border-radius: 5px 0 0 5px; /* Arredondar apenas a borda esquerda */
+}
+
+#user-input-container .btn-success {
+    border-radius: 0 0px 0px 0; /* Arredondar apenas a borda direita */
+    margin-left: 0; /* Remover qualquer margem */
+}
+
+
+#chatbot .btn-success {
+    width: 20%;
+    border-radius: 0px 5px 5px 0px;; /* Remover bordas arredondadas */
+    margin: 0; /* Remover margens */
+    border-left: none; /* Remover a borda esquerda */
+}
+
+
+
+/* Estilos para a visualização de PDFs */
+#pdf-view {
+    padding-top: 40px;
+}
+
+#chatbot {
+    padding-top: 40px;
+}
+
+#overview {
+    padding-top: 40px;
+}
+
+
+
+/* Responsividade para telas menores */
+@media (max-width: 768px) {
+    /* Ajustes para o conteúdo em telas pequenas */
+    .content {
+        margin-left: 0; /* Remove o espaço para a sidebar em telas pequenas */
+    }
+
+    .sidebar {
+        width: 250px; /* Sidebar ajustada para telas pequenas */
+    }
+
+    #user-input-container {
+        left: 0; /* O campo de entrada agora ocupa toda a largura da tela */
+        width: 100%;
+    }
+
+    #user-input {
+        width: 70%;
+    }
+
+    #chatbot .btn-success {
+        width: 25%;
+    }
+
+    /* Ajustando a área do chat para telas pequenas */
+    #chat-box {
+        height: calc(100vh - 120px); /* Ajusta o tamanho do chat para telas pequenas */
+    }
+}
+
+@media (max-width: 576px) {
+    #user-input {
+        width: 60%;
+    }
+
+    #chatbot .btn-success {
+        width: 30%;
+    }
+
+    /* Ajustando a área do chat para telas muito pequenas */
+    #chat-box {
+        height: calc(100vh - 100px); /* Ajuste ainda maior para dispositivos muito pequenos */
+    }
+}
