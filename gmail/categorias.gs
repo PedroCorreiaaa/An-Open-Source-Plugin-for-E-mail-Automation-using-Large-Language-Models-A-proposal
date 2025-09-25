@@ -14,7 +14,7 @@ const categoriasJson = `
   },
   {
     "label": ".Feiras e Mercados",
-    "keywords": ["feira", "mercado", "venda"]
+    "keywords": ["feira", "mercado", "venda", "banca"]
   }
 ]
 `;

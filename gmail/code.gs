@@ -21,8 +21,15 @@ function showHomePage() {
         .setOnClickAction(CardService.newAction().setFunctionName("startAutoReply"))
     );
 
-  // Secção de Estatísticas
-  const statsSection = buildStatsSection();
+  // Nova Secção de Categorização Manual
+  const categorizarSection = CardService.newCardSection()
+    .addWidget(CardService.newTextParagraph().setText("Clique para categorizar automaticamente todos os emails por palavras-chave."))
+    .addWidget(
+      CardService.newTextButton()
+        .setText("🏷️ Categorizar Emails")
+        .setOnClickAction(CardService.newAction().setFunctionName("categorizarEmails"))
+    );
+
 
   // Secção de Gestão de Categorias
   const categorySection = CardService.newCardSection()
@@ -41,29 +48,57 @@ function showHomePage() {
     );
   });
 
-  // Botão Suporte que abre a página contexto.html numa nova aba
+  // Botão Suporte
   const supportButton = CardService.newTextButton()
     .setText("🛠️ Info")
     .setOpenLink(
       CardService.newOpenLink()
-        .setUrl("https://medium.com/@pedromartinscorreia/ai4apgovernance-gmail-add-on-6d1cff48d259") // URL da story no Medium
+        .setUrl("https://medium.com/@pedromartinscorreia/ai4apgovernance-gmail-add-on-6d1cff48d259")
         .setOpenAs(CardService.OpenAs.NEW_TAB)
     );
 
-
-  // Colocar o botão de suporte em uma nova seção, fixá-lo visualmente não é possível no CardService,
-  // mas posicionar no fim do card para ficar visível.
   const supportSection = CardService.newCardSection()
     .addWidget(supportButton);
 
   card
     .addSection(autoReplySection)
-    .addSection(statsSection)
+    .addSection(categorizarSection) // <- Nova secção adicionada aqui
     .addSection(categorySection)
     .addSection(supportSection);
 
   return [card.build()];
 }
+
+
+function categorizarEmails() {
+  const threads = GmailApp.search("is:unread");
+
+  const labelCategorizado = getOrCreateLabel("1. Categorizado");
+
+  for (const thread of threads) {
+    // Ignorar threads que já têm alguma label
+    if (thread.getLabels().length > 0) continue;
+
+    for (const msg of thread.getMessages()) {
+      const content = msg.getPlainBody().trim();
+
+      const category = getEmailCategoryKeyWordMatching(content);
+      if (category) {
+        const label = getOrCreateLabel(category);
+        thread.addLabel(label);
+        thread.addLabel(labelCategorizado);
+      }
+
+      msg.markRead(); // Se quiseres manter como não lido, podes remover esta linha
+    }
+  }
+
+  return CardService.newActionResponseBuilder()
+    .setNavigation(CardService.newNavigation().updateCard(showHomePage()[0]))
+    .setNotification(CardService.newNotification().setText("✅ Categorização concluída com sucesso."))
+    .build();
+}
+
 
 
 function abrirGestaoCategoria(e) {
@@ -492,7 +527,7 @@ function generateResponseFromRAG(emailContent) {
       muteHttpExceptions: true
     };
 
-    const response = UrlFetchApp.fetch("https://2286-2a01-14-136-cb20-a058-2e4-8a82-cad9.ngrok-free.app/query_rag", options);
+    const response = UrlFetchApp.fetch("https://24a006a83746.ngrok-free.app//query_rag", options);
     const json = JSON.parse(response.getContentText());
 
     if (json.error) {
