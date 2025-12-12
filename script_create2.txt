@@ -1,0 +1,137 @@
+CREATE TABLE implementacao (
+    id_implementacao SERIAL PRIMARY KEY,
+    email VARCHAR(255) UNIQUE,
+    plataforma VARCHAR(100)
+);
+
+CREATE TABLE categoria (
+    id_categoria SERIAL PRIMARY KEY,
+    id_implementacao INTEGER NOT NULL,
+    nome VARCHAR(255),
+
+    CONSTRAINT fk_categoria_implementacao
+        FOREIGN KEY (id_implementacao)
+        REFERENCES implementacao(id_implementacao)
+);
+
+
+CREATE TABLE keyword (
+    id_keyword SERIAL PRIMARY KEY,
+    id_categoria INTEGER NOT NULL,
+    keyword VARCHAR(255),
+
+    CONSTRAINT fk_keyword_categoria
+        FOREIGN KEY (id_categoria)
+        REFERENCES categoria(id_categoria)
+);
+
+CREATE TABLE thread (
+    thread_id TEXT PRIMARY KEY,
+    id_implementacao INTEGER NOT NULL,
+    assunto VARCHAR(500),
+
+    CONSTRAINT fk_thread_implementacao
+        FOREIGN KEY (id_implementacao)
+        REFERENCES implementacao(id_implementacao)
+);
+
+
+CREATE TABLE tipo_categorizacao (
+    id_tipo_categorizacao SERIAL PRIMARY KEY,
+    descricao VARCHAR(255)
+);
+
+
+INSERT INTO tipo_categorizacao (id_tipo_categorizacao, descricao)
+VALUES 
+    (1, 'Automática'),
+    (2, 'Manual');
+
+
+CREATE TABLE email (
+    message_id TEXT PRIMARY KEY,
+    id_implementacao INTEGER NOT NULL,
+    thread_id TEXT NOT NULL,
+    remetente VARCHAR(255),
+    corpo TEXT,
+    resposta TEXT,
+    categorizado BOOLEAN DEFAULT FALSE,
+    resposta_gerada BOOLEAN DEFAULT FALSE,
+    resposta_validada BOOLEAN DEFAULT FALSE,
+    respondido BOOLEAN DEFAULT FALSE,
+
+    CONSTRAINT fk_email_implementacao
+        FOREIGN KEY (id_implementacao)
+        REFERENCES implementacao(id_implementacao),
+
+    CONSTRAINT fk_email_thread
+        FOREIGN KEY (thread_id)
+        REFERENCES thread(thread_id)
+);
+
+
+CREATE TABLE thread_categorizacao (
+    id_categoria INTEGER NOT NULL,
+    thread_id TEXT NOT NULL,
+    id_tipo_categorizacao INTEGER,
+    keywords TEXT,
+    data TIMESTAMP,
+    ativa BOOLEAN DEFAULT TRUE,
+
+    PRIMARY KEY (id_categoria, thread_id),
+
+    CONSTRAINT fk_threadcat_categoria
+        FOREIGN KEY (id_categoria)
+        REFERENCES categoria(id_categoria),
+
+    CONSTRAINT fk_threadcat_thread
+        FOREIGN KEY (thread_id)
+        REFERENCES thread(thread_id),
+
+    CONSTRAINT fk_threadcat_tipo
+        FOREIGN KEY (id_tipo_categorizacao)
+        REFERENCES tipo_categorizacao(id_tipo_categorizacao)
+);
+
+
+CREATE TABLE tipo_resposta (
+    id_tipo_resposta SERIAL PRIMARY KEY,
+    descricao VARCHAR(255)
+);
+
+INSERT INTO tipo_resposta (id_tipo_resposta, descricao)
+VALUES (1, 'RAG');
+
+
+CREATE TABLE resposta_gerada (
+    id_resposta SERIAL PRIMARY KEY,
+    message_id TEXT NOT NULL,
+    id_tipo_resposta INTEGER NOT NULL,
+    conteudo TEXT,
+    status VARCHAR(100),
+    data_criacao TIMESTAMP,
+    data_validacao TIMESTAMP,
+
+    CONSTRAINT fk_resposta_email
+        FOREIGN KEY (message_id)
+        REFERENCES email(message_id),
+
+    CONSTRAINT fk_resposta_tipo
+        FOREIGN KEY (id_tipo_resposta)
+        REFERENCES tipo_resposta(id_tipo_resposta)
+);
+
+
+CREATE OR REPLACE FUNCTION inserir_categoria_outro()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO categoria (id_implementacao, nome)
+    VALUES (NEW.id_implementacao, '.Outro');
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_inserir_categoria_outro
+AFTER INSERT ON implementacao
+FOR EACH ROW
+EXECUTE FUNCTION inserir_categoria_outro();

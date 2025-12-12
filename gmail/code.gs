@@ -1,16 +1,77 @@
+const API_URL = 'https://2293ffcd8565.ngrok-free.app/implementacao';
+const API_SECRET = 'yg4yqJhRU6UVjNFaKXbzVrwiNIc38RLf';
+
 function buildAddOn(e) {
-  Logger.log(JSON.stringify(e, null, 2)); // debug
+  Logger.log(JSON.stringify(e, null, 2));
+  const email = Session.getActiveUser().getEmail();
+  const implementation = checkOrCreateImplementation(email); // Retorna o objeto {id_implementacao: 1, ...}
+    
+  ensureBaseLabelsExist(implementation.id_implementacao);
 
   if (e.gmail && e.gmail.messageId) {
-    return showEmailContextCard(e);
-  } else if(e.label){
-    return sh
-  }else{
-    return showHomePage();
-  }
+    return showEmailContextCard(e,implementation.id_implementacao);
+  } else {
+    return showHomePage(implementation.id_implementacao);  }
 }
-function showHomePage() {
+
+function ensureBaseLabelsExist(implementationId) {
+    
+    // Labels base que devem existir independentemente da API
+    const baseLabels = [
+        "1. Categorizado",
+        "2. Resposta Gerada",
+        "3. Resposta Validada",
+        "4. Respondido"
+    ];
+
+    const categories = getCategories(implementationId); 
+    
+    if (!Array.isArray(categories)) {
+        Logger.log('Erro: getCategories não retornou um array. Prosseguindo apenas com baseLabels.');
+    } else {
+        categories.forEach(cat => {
+            if (cat.nome) {
+                baseLabels.push(cat.nome);
+            }
+        });
+    }
+    
+    if (baseLabels.length === 0) {
+        Logger.log('Nenhum label (base ou customizado) para criar.');
+        return;
+    }
+
+
+    baseLabels.forEach(labelName => {
+        try {
+            // Verifica se o label já existe
+            if (!GmailApp.getUserLabelByName(labelName)) {
+                // Se não existir, cria o novo label
+                GmailApp.createLabel(labelName);
+                Logger.log(`✅ Label criado: ${labelName}`);
+            }
+        } catch (e) {
+            Logger.log(`❌ Erro ao criar o label "${labelName}": ${e}`);
+        }
+    });
+
+    Logger.log('Verificação de labels concluída.');
+}
+
+function showHomePage(implementationId) {
   const card = CardService.newCardBuilder();
+
+  // Secção de Função Extra
+  const sendEmailsSection = CardService.newCardSection()
+    .addWidget(
+      CardService.newTextButton()
+        .setText("🚀 Enviar Emails de Teste")
+        .setOnClickAction(
+          CardService.newAction()
+            .setFunctionName("enviarEmailsDeTeste")  // <-- substitui pela tua função
+            .setParameters({ implementationId: String(implementationId) }) // opcional
+        )
+    );
 
   // Secção de Auto-Resposta
   const autoReplySection = CardService.newCardSection()
@@ -23,30 +84,30 @@ function showHomePage() {
 
   // Nova Secção de Categorização Manual
   const categorizarSection = CardService.newCardSection()
-    .addWidget(CardService.newTextParagraph().setText("Clique para categorizar automaticamente todos os emails por palavras-chave."))
+    .addWidget(CardService.newTextParagraph().setText("Clique para iniciar um ciclo de categorização automática de 20 emails por palavras-chave."))
     .addWidget(
       CardService.newTextButton()
         .setText("🏷️ Categorizar Emails")
-        .setOnClickAction(CardService.newAction().setFunctionName("categorizarEmails"))
+        .setOnClickAction(
+          CardService.newAction()
+            .setFunctionName("categorizarEmails")
+            .setParameters({ implementationId: String(implementationId) })
+        )  
     );
-
 
   // Secção de Gestão de Categorias
   const categorySection = CardService.newCardSection()
     .addWidget(CardService.newTextParagraph().setText("📁 <b>Gerir Palavras-chave por Categoria</b>"));
 
-  const categorias = getCategorias();
-  categorias.forEach(cat => {
-    categorySection.addWidget(
-      CardService.newTextButton()
-        .setText(`🔧 ${cat.label}`)
-        .setOnClickAction(
-          CardService.newAction()
-            .setFunctionName("abrirGestaoCategoria")
-            .setParameters({ labelName: cat.label })
-        )
-    );
-  });
+  categorySection.addWidget(
+    CardService.newTextButton()
+      .setText("Gerir Categorias")
+      .setOnClickAction(
+        CardService.newAction()
+          .setFunctionName("showCategoryManagementPage")
+          .setParameters({ implementationId: String(implementationId) })
+      )
+  );
 
   // Botão Suporte
   const supportButton = CardService.newTextButton()
@@ -62,108 +123,178 @@ function showHomePage() {
 
   card
     .addSection(autoReplySection)
-    .addSection(categorizarSection) // <- Nova secção adicionada aqui
+    .addSection(categorizarSection)
     .addSection(categorySection)
-    .addSection(supportSection);
+    .addSection(supportSection)
+    .addSection(sendEmailsSection);
+
+  return [card.build()];
+}
+
+function showCategoryManagementPage(e) {
+  const implementationId = e.parameters.implementationId;
+  const card = CardService.newCardBuilder();
+  const categorias = getCategories(implementationId);
+
+  //
+  // 🔹 SECÇÃO TÍTULO
+  //
+  const headerSection = CardService.newCardSection()
+    .addWidget(
+      CardService.newTextParagraph().setText("📁 <b>Gestão de Categorias</b>")
+    );
+
+  card.addSection(headerSection);
+
+
+  //
+  // 🔹 UMA SECTION POR CATEGORIA
+  //
+  if (categorias.length > 0) {
+
+    categorias.forEach((cat) => {
+      if (cat.nome === ".Outro") return;
+
+      const sec = CardService.newCardSection();
+
+      // Nome da categoria
+      sec.addWidget(
+        CardService.newTextParagraph().setText(`<b>${cat.nome}</b>`)
+      );
+
+      // ButtonSet: editar + eliminar
+      const btns = CardService.newButtonSet();
+
+      btns.addButton(
+        CardService.newTextButton()
+          .setText("🔧 Editar")
+          .setOnClickAction(
+            CardService.newAction()
+              .setFunctionName("showCategoryKeywordManager")
+              .setParameters({
+                labelName: String(cat.nome),
+                implementationId: String(implementationId)
+              })
+          )
+      );
+
+      btns.addButton(
+        CardService.newTextButton()
+          .setText("🗑️ Apagar")
+          .setTextButtonStyle(CardService.TextButtonStyle.DESTRUCTIVE)
+          .setOnClickAction(
+            CardService.newAction()
+              .setFunctionName("deleteCategory")
+              .setParameters({
+                implementationId: String(implementationId),
+                categoryId: String(cat.id_categoria),
+                categoryName: String(cat.nome)
+              })
+          )
+      );
+
+      sec.addWidget(btns);
+
+      // Adiciona a section desta categoria ao card
+      card.addSection(sec);
+    });
+
+  } else {
+    const emptySection = CardService.newCardSection()
+      .addWidget(
+        CardService.newTextParagraph().setText("Nenhuma categoria encontrada.")
+      );
+    card.addSection(emptySection);
+  }
+
+
+  //
+  // 🔹 SECÇÃO PARA CRIAR NOVA CATEGORIA
+  //
+  const createSection = CardService.newCardSection()
+    .addWidget(
+      CardService.newTextButton()
+        .setText("➕ Criar Nova Categoria")
+        .setOnClickAction(
+          CardService.newAction()
+            .setFunctionName("showCreateCategoryPrompt")
+            .setParameters({ implementationId: String(implementationId) })
+        )
+    );
+
+  card.addSection(createSection);
 
   return [card.build()];
 }
 
 
-function categorizarEmails() {
-  const threads = GmailApp.search("is:unread");
-
-  const labelCategorizado = getOrCreateLabel("1. Categorizado");
-
-  for (const thread of threads) {
-    // Ignorar threads que já têm alguma label
-    if (thread.getLabels().length > 0) continue;
-
-    for (const msg of thread.getMessages()) {
-      const content = msg.getPlainBody().trim();
-
-      const category = getEmailCategoryKeyWordMatching(content);
-      if (category) {
-        const label = getOrCreateLabel(category);
-        thread.addLabel(label);
-        thread.addLabel(labelCategorizado);
-      }
-
-      msg.markRead(); // Se quiseres manter como não lido, podes remover esta linha
-    }
+function showCreateCategoryPrompt(e) {
+  // Verificar se o parâmetro implementationId está presente
+  if (!e || !e.parameters || !e.parameters.implementationId) {
+    const card = CardService.newCardBuilder();
+    const section = CardService.newCardSection();
+    
+    // Adicionar mensagem de erro
+    section.addWidget(
+      CardService.newTextParagraph().setText("Erro: implementationId não encontrado.")
+    );
+    
+    card.addSection(section);
+    return [card.build()];
   }
 
-  return CardService.newActionResponseBuilder()
-    .setNavigation(CardService.newNavigation().updateCard(showHomePage()[0]))
-    .setNotification(CardService.newNotification().setText("✅ Categorização concluída com sucesso."))
-    .build();
-}
+  const implementationId = e.parameters.implementationId; // Agora podemos garantir que está presente
 
-
-
-function abrirGestaoCategoria(e) {
-  const label = e.parameters.labelName;
-  return showCategoryKeywordManager(label);
-}
-
-function showEmailContextCard(e) {
-  const messageId = e.gmail.messageId;
-  const message = GmailApp.getMessageById(messageId);
-  const thread = message.getThread();
-  const subject = message.getSubject();
-
+  const card = CardService.newCardBuilder();
   const section = CardService.newCardSection();
 
-  // Verificar se o thread tem a label "Respondido"
-  const labels = thread.getLabels().map(label => label.getName());
-  const jaRespondido = labels.includes("4. Respondido");
+  // Adiciona um campo de texto para o nome da nova categoria
+  section.addWidget(
+    CardService.newTextInput()
+      .setFieldName("categoryName")
+      .setTitle("Nome da Nova Categoria")
+      .setHint("Digite o nome da nova categoria")
+  );
 
-  const respostaGuardada = getResponseForThread(thread.getId());
-  const validada = isResponseValidated(thread.getId());
+  // Botão para submeter a criação da categoria
+  section.addWidget(
+    CardService.newTextButton()
+      .setText("Criar Categoria")
+      .setOnClickAction(CardService.newAction().setFunctionName("createCategory").setParameters({
+        implementationId: String(implementationId)  // Passar implementationId corretamente
+      }))
+  );
 
-  if (jaRespondido) {
-    section.addWidget(CardService.newTextParagraph().setText("✅ Este email já foi respondido."));
-  } else if (respostaGuardada) {
-    section.addWidget(CardService.newTextParagraph().setText("💬 <b>Resposta gerada para este email:</b>"));
-    section.addWidget(CardService.newTextParagraph().setText(respostaGuardada));
-
-    if (!validada) {
-      // Botão para gerar resposta melhor
-      section.addWidget(
-        CardService.newTextButton()
-          .setText("♻️ Gerar uma melhor resposta")
-          .setOnClickAction(CardService.newAction()
-            .setFunctionName("generateBetterResponse")
-            .setParameters({threadId: thread.getId()})
-          )
-      );
-
-      // Botão para aprovar e enviar
-      section.addWidget(
-        CardService.newTextButton()
-          .setText("✅ Aprovar e enviar resposta")
-          .setOnClickAction(CardService.newAction()
-            .setFunctionName("approveAndSendResponse")
-            .setParameters({threadId: thread.getId()})
-          )
-      );
-    } else {
-      section.addWidget(CardService.newTextParagraph().setText("✅ Resposta aprovada e enviada."));
-    }
-  } else {
-    section.addWidget(CardService.newTextParagraph().setText("❌ Não existe resposta gerada para este email."));
-  }
-  const card = CardService.newCardBuilder()
-    .setHeader(CardService.newCardHeader().setTitle("✉️ Email: " + subject))
-    .addSection(section)
-    .build();
-
-  return [card];
+  card.addSection(section);
+  return [card.build()];
 }
 
-function showCategoryKeywordManager(labelName) {
-  const categorias = getCategorias();
-  const categoria = categorias.find(cat => cat.label === labelName);
+
+function showCategoryKeywordManager(e) {
+  const labelName = e.parameters.labelName;  // Obtém o nome da categoria
+  const implementationId = e.parameters.implementationId;  // Obtém o ID da implementação
+
+  console.log(implementationId);  // Verifica se o parâmetro foi passado corretamente
+  console.log(labelName);  // Verifica o conteúdo de labelName
+
+  if (!implementationId || !labelName) {
+    console.log("Erro: Parâmetros necessários não encontrados.");
+    return;  // Retorna um erro ou exibe uma mensagem ao usuário
+  }
+
+  const categorias = getCategories(implementationId);  // Obtém as categorias usando o implementationId
+
+  console.log(categorias);  // Verifica as categorias recuperadas
+
+  // Encontrar a categoria que corresponde ao labelName
+  const categoria = categorias.find(cat => cat.nome.trim() === labelName.trim());
+
+  if (!categoria) {
+    console.log(`Categoria com label '${labelName}' não encontrada.`);
+    return;  // Retorna um erro ou exibe uma mensagem ao usuário
+  }
+
+  const categoryId = String(categoria.id_categoria);  // Passar categoryId como string
 
   const card = CardService.newCardBuilder()
     .setHeader(CardService.newCardHeader().setTitle("🗂️ Gestão de Palavras-chave"))
@@ -175,94 +306,235 @@ function showCategoryKeywordManager(labelName) {
   const keywordSection = CardService.newCardSection()
     .addWidget(CardService.newTextParagraph().setText("Palavras-chave atuais:"));
 
-  if (categoria.keywords && categoria.keywords.length > 0) {
-    categoria.keywords.forEach(keyword => {
-      keywordSection.addWidget(
-        CardService.newDecoratedText()
-          .setText(`<b><i>${keyword}</i></b>`)
-          .setWrapText(true)
-          .setButton(
-            CardService.newTextButton()
-              .setText("❌ Remover")
-              .setOnClickAction(
-                CardService.newAction()
-                  .setFunctionName("removerKeyword")
-                  .setParameters({ label: labelName, keyword })
-              )
-          )
-      );
+  // Buscar as palavras-chave da categoria
+  const keywords = getKeywords(implementationId, categoryId);  // Função que chama o backend para obter as keywords
+
+  if (keywords.length > 0) {
+    keywords.forEach(keyword => {
+      // Verificar se 'keyword.keyword' está presente
+      if (keyword && keyword.keyword) {
+        keywordSection.addWidget(
+          CardService.newDecoratedText()
+            .setText(`<b><i>${keyword.keyword}</i></b>`)
+            .setWrapText(true)
+            .setButton(
+              CardService.newTextButton()
+                .setText("❌ Remover")
+                .setOnClickAction(
+                  CardService.newAction()
+                    .setFunctionName("removerKeyword")
+                    .setParameters({ 
+                      categoryId: String(categoryId),  // Passa o ID da categoria
+                      implementationId: String(implementationId) , // Passa o ID da implementação
+                      keywordId: String(keyword.id_keyword)  // Garantir que o ID seja passado como string
+                    })
+                )
+            )
+        );
+      } else {
+        console.log(`Keyword inválida: ${keyword}`);
+      }
     });
   } else {
-    keywordSection.addWidget(CardService.newTextParagraph().setText("_Nenhuma palavra-chave definida._"));
+    keywordSection.addWidget(CardService.newTextParagraph().setText("Nenhuma palavra-chave definida."));
   }
-
   const inputSection = CardService.newCardSection()
     .addWidget(
       CardService.newTextInput()
-        .setFieldName("novaKeyword")
+        .setFieldName("novaKeyword")  // Define o campo de texto
         .setTitle("Adicionar nova palavra-chave")
     )
     .addWidget(
       CardService.newTextButton()
         .setText("➕ Adicionar")
-        .setOnClickAction(CardService.newAction()
-          .setFunctionName("adicionarKeyword")
-          .setParameters({ label: labelName }))
+        .setOnClickAction(
+          CardService.newAction()
+            .setFunctionName("adicionarKeyword")  // Define a função que será chamada
+            .setParameters({
+              categoryId: categoryId,  // Passa o ID da categoria
+              implementationId: implementationId  // Passa o ID da implementação
+            })
+        )
     );
+
 
   return [card.addSection(keywordSection).addSection(inputSection).build()];
 }
 
-function adicionarKeyword(e) {
-  const label = e.parameters.label;
-  const novaKeyword = e.formInput.novaKeyword;
 
-  if (!novaKeyword || novaKeyword.trim() === "") {
-    return CardService.newActionResponseBuilder()
-      .setNotification(CardService.newNotification().setText("⚠️ Insira uma palavra-chave válida."))
-      .build();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function showEmailContextCard(e, id_implementacao) {
+  // ------------------------------------------------------------
+  // 1️⃣ Obter Message ID REAL (converter ID opaco do Add-on)
+  // ------------------------------------------------------------
+  const opaqueId = e.gmail.messageId;  // ex: msg-a:r-44995...
+  const message = GmailApp.getMessageById(opaqueId);
+  const messageId = message.getId();   // ex: 19a9e40959f650f5 (o ID certo)
+
+  const thread = message.getThread();
+  const subject = message.getSubject();
+
+  // Criar card builder
+  const cardBuilder = CardService.newCardBuilder();
+
+  // Secção principal
+  const section = CardService.newCardSection();
+
+  // ------------------------------------------------------------
+  // 2️⃣ Verificar labels e respostas geradas
+  // ------------------------------------------------------------
+  const labels = thread.getLabels().map(label => label.getName());
+  const jaRespondido = labels.includes("4. Respondido");
+
+  const respostaGuardada = getResponseForThread(thread.getId());
+  const validada = isResponseValidated(thread.getId());
+
+  // ------------------------------------------------------------
+  // 3️⃣ Secção de CATEGORIZAÇÃO MANUAL
+  // ------------------------------------------------------------
+  const categorias = getCategories(String(id_implementacao));
+
+  if (categorias && categorias.length > 0) {
+    const categoriaSection = CardService.newCardSection()
+      .setHeader("📂 Categorizar email");
+
+    const categoriaDropdown = CardService.newSelectionInput()
+      .setFieldName("id_categoria")
+      .setTitle("Selecionar categoria")
+      .setType(CardService.SelectionInputType.DROPDOWN);
+
+    categorias.forEach(cat => {
+      categoriaDropdown.addItem(cat.nome, String(cat.id_categoria), false);
+    });
+
+    categoriaSection.addWidget(categoriaDropdown);
+
+    categoriaSection.addWidget(
+      CardService.newTextButton()
+        .setText("💾 Guardar categoria")
+        .setOnClickAction(
+          CardService.newAction()
+            .setFunctionName("categorizarEmailManualmente")
+            .setParameters({
+              messageId: messageId,  // agora o ID real
+              id_implementacao: String(id_implementacao)
+            })
+        )
+    );
+
+    cardBuilder.addSection(categoriaSection);
   }
 
-  const categorias = getCategorias();
-  const categoria = categorias.find(cat => cat.label === label);
+  // ------------------------------------------------------------
+  // 4️⃣ Secção de respostas automáticas
+  // ------------------------------------------------------------
+  if (jaRespondido) {
+    section.addWidget(
+      CardService.newTextParagraph().setText("✅ Este email já foi respondido.")
+    );
 
-  if (!categoria.keywords) categoria.keywords = [];
+  } else if (respostaGuardada) {
+    section.addWidget(
+      CardService.newTextParagraph()
+        .setText("💬 <b>Resposta gerada para este email:</b>")
+    );
+    section.addWidget(
+      CardService.newTextParagraph().setText(respostaGuardada)
+    );
 
-  // Evitar duplicados
-  if (!categoria.keywords.includes(novaKeyword.trim())) {
-    categoria.keywords.push(novaKeyword.trim());
-    saveCategorias(categorias);
+    if (!validada) {
+      section.addWidget(
+        CardService.newTextButton()
+          .setText("♻️ Gerar uma melhor resposta")
+          .setOnClickAction(
+            CardService.newAction()
+              .setFunctionName("generateBetterResponse")
+              .setParameters({ threadId: thread.getId() })
+          )
+      );
+
+      section.addWidget(
+        CardService.newTextButton()
+          .setText("✅ Aprovar e enviar resposta")
+          .setOnClickAction(
+            CardService.newAction()
+              .setFunctionName("approveAndSendResponse")
+              .setParameters({ threadId: thread.getId() })
+          )
+      );
+
+    } else {
+      section.addWidget(
+        CardService.newTextParagraph().setText("✅ Resposta aprovada e enviada.")
+      );
+    }
+
   } else {
-    return CardService.newActionResponseBuilder()
-      .setNotification(CardService.newNotification().setText("⚠️ Palavra-chave já existe."))
-      .build();
+    section.addWidget(
+      CardService.newTextParagraph()
+        .setText("❌ Não existe resposta gerada para este email.")
+    );
   }
 
-  // Atualiza o cartão
-  return CardService.newActionResponseBuilder()
-    .setNavigation(CardService.newNavigation().updateCard(showCategoryKeywordManager(label)[0]))
-    .setNotification(CardService.newNotification().setText(`Palavra-chave "${novaKeyword.trim()}" adicionada.`))
-    .build();
+  // Adicionar secção principal
+  cardBuilder.addSection(section);
+
+  // Cabeçalho do card
+  cardBuilder.setHeader(
+    CardService.newCardHeader().setTitle("✉️ Email: " + subject)
+  );
+
+  // Construir e retornar
+  return [cardBuilder.build()];
 }
 
-
-function removerKeyword(e) {
-  const label = e.parameters.label;
-  const keywordToRemove = e.parameters.keyword;
-
-  const categorias = getCategorias();
-  const categoria = categorias.find(cat => cat.label === label);
-  if (!categoria || !categoria.keywords) return;
-
-  categoria.keywords = categoria.keywords.filter(kw => kw !== keywordToRemove);
-  saveCategorias(categorias);
-
-  // Atualiza o cartão
-  return CardService.newActionResponseBuilder()
-    .setNavigation(CardService.newNavigation().updateCard(showCategoryKeywordManager(label)[0]))
-    .setNotification(CardService.newNotification().setText(`Palavra-chave "${keywordToRemove}" removida.`))
-    .build();
-}
 
 
 
@@ -499,19 +771,33 @@ function getOrCreateLabel(name) {
 }
 
 function getEmailCategoryKeyWordMatching(content) {
-  content = content.toLowerCase();
+  content = content
+    .toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ");
+
   const categorias = getCategorias();
+  let bestMatch = ".Outro";
+  let highestScore = 0;
 
   for (const cat of categorias) {
+    let score = 0;
+
     for (const keyword of cat.keywords) {
-      if (content.includes(keyword.toLowerCase())) {
-        return cat.label;
-      }
+      const regex = new RegExp(`\\b${keyword.toLowerCase()}\\b`, "gi");
+      const matches = content.match(regex);
+      if (matches) score += matches.length;
+    }
+
+    if (score > highestScore) {
+      highestScore = score;
+      bestMatch = cat.label;
     }
   }
 
-  return ".Outro";
+  return bestMatch;
 }
+
 
 function generateResponseFromRAG(emailContent) {
   try {
@@ -527,7 +813,7 @@ function generateResponseFromRAG(emailContent) {
       muteHttpExceptions: true
     };
 
-    const response = UrlFetchApp.fetch("https://24a006a83746.ngrok-free.app//query_rag", options);
+    const response = UrlFetchApp.fetch("https://24a006a83746.ngrok-free.app/query_rag", options);
     const json = JSON.parse(response.getContentText());
 
     if (json.error) {
