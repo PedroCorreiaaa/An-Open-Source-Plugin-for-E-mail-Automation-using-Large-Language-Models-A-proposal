@@ -1,12 +1,10 @@
 function checkOrCreateImplementation(email) {
-  const url = `${API_URL}/${email}`; 
-  const response = UrlFetchApp.fetch(url, {
+  const url = `${API_URL}/implementacao/${email}`; 
+  const response = fetchWithAuth(url, {
     method: 'GET',
     headers: {
-      'Authorization': `Bearer ${API_SECRET}`,
       'ngrok-skip-browser-warning': 'true',
-    },
-    muteHttpExceptions: true,
+    }
   });
 
   const responseCode = response.getResponseCode();
@@ -31,13 +29,10 @@ function checkOrCreateImplementation(email) {
 
 function createImplementation(email) {
   const payload = JSON.stringify({ email });
-  const createResponse = UrlFetchApp.fetch(API_URL, {
+  const createResponse = fetchWithAuth(`${API_URL}/implementacao`, {
     method: 'POST',
     contentType: 'application/json',
-    headers: {
-      'Authorization': `Bearer ${API_SECRET}`,
-   },
-    payload: payload,
+    payload: payload
   });
 
   const createData = JSON.parse(createResponse.getContentText());

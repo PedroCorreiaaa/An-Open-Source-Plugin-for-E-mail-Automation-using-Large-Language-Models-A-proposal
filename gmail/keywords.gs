@@ -1,12 +1,10 @@
 function getKeywords(implementationId, categoryId) {
-  const url = `${API_URL}/${implementationId}/categoria/${categoryId}/keywords`;
-  const response = UrlFetchApp.fetch(url, {
+  const url = `${API_URL}/implementacao/${implementationId}/categoria/${categoryId}/keywords`;
+  const response = fetchWithAuth(url, {
     method: 'GET',
     headers: {
-      'Authorization': `Bearer ${API_SECRET}`,
-      'ngrok-skip-browser-warning': 'true',
-    },
-    muteHttpExceptions: true,
+      'ngrok-skip-browser-warning': 'true'
+    }
   });
 
   const responseCode = response.getResponseCode();
@@ -30,21 +28,17 @@ function adicionarKeyword(e) {
     return;
   }
 
-  const url = `${API_URL}/${implementationId}/categoria/${categoryId}/keyword`;
+  const url = `${API_URL}/implementacao/${implementationId}/categoria/${categoryId}/keyword`;
 
-  const payload = JSON.stringify({
-    keyword: novaKeyword
-  });
+  const payload = JSON.stringify({ keyword: novaKeyword });
 
-  const response = UrlFetchApp.fetch(url, {
+  const response = fetchWithAuth(url, {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${API_SECRET}`,
-      'Content-Type': 'application/json',
-      'ngrok-skip-browser-warning': 'true',
-    },
+    contentType: 'application/json',
     payload: payload,
-    muteHttpExceptions: true,
+    headers: {
+      'ngrok-skip-browser-warning': 'true'
+    }
   });
 
   const responseCode = response.getResponseCode();
@@ -52,7 +46,7 @@ function adicionarKeyword(e) {
 
   if (responseCode === 200) {
     Logger.log(`Palavra-chave '${novaKeyword}' adicionada com sucesso!`);
-    showCategoryKeywordManager(e);
+    return showCategoryKeywordManager(e);
   } else {
     Logger.log(`Erro ao adicionar palavra-chave: ${responseBody.error}`);
   }
@@ -60,21 +54,18 @@ function adicionarKeyword(e) {
 
 
 
-// Função para remover uma keyword
 function removerKeyword(e) {
   const categoryId = e.parameters.categoryId;
   const keywordId = e.parameters.keywordId;
   const implementationId = e.parameters.implementationId;
 
-  const url = `${API_URL}/${implementationId}/categoria/${categoryId}/keyword/${keywordId}`;
+  const url = `${API_URL}/implementacao/${implementationId}/categoria/${categoryId}/keyword/${keywordId}`;
 
-  const response = UrlFetchApp.fetch(url, {
+  const response = fetchWithAuth(url, {
     method: 'DELETE',
     headers: {
-      'Authorization': `Bearer ${API_SECRET}`,
-      'ngrok-skip-browser-warning': 'true',
-    },
-    muteHttpExceptions: true,
+      'ngrok-skip-browser-warning': 'true'
+    }
   });
 
   const responseCode = response.getResponseCode();
@@ -82,7 +73,7 @@ function removerKeyword(e) {
 
   if (responseCode === 200) {
     Logger.log(`Keyword com ID ${keywordId} removida com sucesso!`);
-    showCategoryKeywordManager(e);
+    return showCategoryKeywordManager(e);
   } else {
     Logger.log(`Erro ao remover keyword: ${responseBody.error}`);
   }

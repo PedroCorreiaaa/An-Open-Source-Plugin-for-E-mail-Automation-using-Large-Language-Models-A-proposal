@@ -1,4 +1,5 @@
 import { pool } from "../db.js";
+import { generateKeywords } from "../services/generateKeywords.js";
 
 export default async function categoriaRoutes(fastify, opts) {
   // GET /implementacao/:id_implementacao/categorias
@@ -63,31 +64,63 @@ export default async function categoriaRoutes(fastify, opts) {
 
   // POST /implementacao/:id_implementacao/categoria
   fastify.post("/implementacao/:id_implementacao/categoria", async (request, reply) => {
-    const { id_implementacao } = request.params;
-    let { nome } = request.body;
-
-    if (!nome) {
-      return reply.code(400).send({ error: "Campo 'nome' é obrigatório" });
-    }
-
-    nome = "." + nome;
+    const client = await pool.connect();
 
     try {
-      const result = await pool.query(
-        `INSERT INTO categoria (id_implementacao, nome)
-         VALUES ($1, $2) RETURNING *`,
-        [id_implementacao, nome]
+      const { id_implementacao } = request.params;
+      let { nome, questao, paraQueServe } = request.body;
+
+      if (!nome) {
+        return reply.code(400).send({ error: "Campo 'nome' é obrigatório" });
+      }
+
+      nome = "." + nome;
+
+      const textoCompleto = [nome, questao, paraQueServe].filter(Boolean).join(" ");
+
+      const keywords = await generateKeywords(textoCompleto, 12);
+
+      await client.query("BEGIN");
+
+      const categoriaResult = await client.query(
+        `INSERT INTO categoria (id_implementacao, nome, questao, para_que_serve)
+        VALUES ($1, $2, $3, $4)
+        RETURNING id_categoria`,
+        [id_implementacao, nome, questao, paraQueServe]
       );
+
+      const categoriaId = categoriaResult.rows[0]?.id_categoria;
+
+      if (!categoriaId) {
+        throw new Error("ID da categoria não foi gerado");
+      }
+
+      if (keywords.length > 0) {
+        await client.query(
+          `INSERT INTO keyword (id_categoria, keyword)
+          SELECT $1, unnest($2::text[])`,
+          [categoriaId, keywords]
+        );
+      }
+
+      await client.query("COMMIT");
 
       reply.code(201).send({
         message: "Categoria criada com sucesso",
-        categoria: result.rows[0],
+        id_categoria: categoriaId,
+        keywordsGeradas: keywords
       });
+
     } catch (err) {
+      await client.query("ROLLBACK");
       request.log.error(err);
       reply.code(500).send({ error: "Erro ao criar categoria" });
+    } finally {
+      client.release();
     }
   });
+
+
 
   // PUT /implementacao/:id_implementacao/categoria/:id_categoria
   fastify.put("/implementacao/:id_implementacao/categoria/:id_categoria", async (request, reply) => {
@@ -122,89 +155,93 @@ export default async function categoriaRoutes(fastify, opts) {
       reply.code(500).send({ error: "Erro ao atualizar categoria" });
     }
   });
-
   // DELETE /implementacao/:id_implementacao/categoria/:id_categoria
   fastify.delete("/implementacao/:id_implementacao/categoria/:id_categoria", async (request, reply) => {
-      const { id_implementacao, id_categoria } = request.params;
-      console.log(`Recebido para excluir categoria: Implementação ${id_implementacao}, Categoria ${id_categoria}`);
+    const { id_implementacao, id_categoria } = request.params;
+    console.log(`Recebido para excluir categoria: Implementação ${id_implementacao}, Categoria ${id_categoria}`);
 
-      try {
-          // 1. Verificar se a categoria existe
-          const categoriaCheck = await pool.query(
-              `SELECT * FROM categoria
-              WHERE id_categoria = $1 AND id_implementacao = $2`,
-              [id_categoria, id_implementacao]
-          );
+    try {
+        // 1. Verificar se a categoria existe
+        const categoriaCheck = await pool.query(
+            `SELECT *
+             FROM categoria
+             WHERE id_categoria = $1 AND id_implementacao = $2`,
+            [id_categoria, id_implementacao]
+        );
 
-          if (categoriaCheck.rowCount === 0) {
-              return reply.code(404).send({ error: "Categoria não encontrada" });
-          }
+        if (categoriaCheck.rowCount === 0) {
+            return reply.code(404).send({ error: "Categoria não encontrada" });
+        }
 
-          // 2. Obter categoria ".Outro"
-          const outroResult = await pool.query(
-              `SELECT id_categoria 
-              FROM categoria
-              WHERE id_implementacao = $1
-                AND LOWER(nome) IN ('.outro', 'outro')`,
-              [id_implementacao]
-          );
+        // 2. Obter categoria ".Outro"
+        const outroResult = await pool.query(
+            `SELECT id_categoria
+             FROM categoria
+             WHERE id_implementacao = $1
+               AND LOWER(nome) IN ('.outro', 'outro')`,
+            [id_implementacao]
+        );
 
-          if (outroResult.rowCount === 0) {
-              return reply.code(400).send({
-                  error: "Categoria '.Outro' não encontrada nesta implementação"
-              });
-          }
+        if (outroResult.rowCount === 0) {
+            return reply.code(400).send({
+                error: "Categoria '.Outro' não encontrada nesta implementação"
+            });
+        }
 
-          const idCategoriaOutro = outroResult.rows[0].id_categoria;
+        const idCategoriaOutro = outroResult.rows[0].id_categoria;
 
-          // 3. Obter emails que têm categorização ativa na categoria a eliminar
-          const emailsParaReclassificar = await pool.query(
-              `SELECT id_email
-              FROM email_categorizacao
-              WHERE id_categoria = $1
-                AND ativo = true`,
-              [id_categoria]
-          );
+        // 3. Obter threads com categorização ativa na categoria a eliminar
+        const threadsParaReclassificar = await pool.query(
+            `SELECT thread_id
+             FROM thread_categorizacao
+             WHERE id_categoria = $1
+               AND ativa = true`,
+            [id_categoria]
+        );
 
-          // 4. Reclassificar emails para .Outro
-          for (const row of emailsParaReclassificar.rows) {
-              const idEmail = row.id_email;
+        // 4. Reclassificar threads para .Outro
+        for (const row of threadsParaReclassificar.rows) {
+            const threadId = row.thread_id;
 
-              // 4.1 Desativar categorização atual
-              await pool.query(
-                  `UPDATE email_categorizacao
-                  SET ativo = false
-                  WHERE id_email = $1`,
-                  [idEmail]
-              );
+            // 4.1 Desativar categorização atual (todas as categorias dessa thread)
+            await pool.query(
+                `UPDATE thread_categorizacao
+                 SET ativa = false
+                 WHERE thread_id = $1
+                   AND ativa = true`,
+                [threadId]
+            );
 
-              // 4.2 Criar nova categorização para .Outro
-              await pool.query(
-                  `INSERT INTO email_categorizacao
-                      (id_email, id_categoria, id_tipo_categorizacao, ativo)
-                  VALUES ($1, $2, 3, true)`,
-                  [idEmail, idCategoriaOutro]
-              );
-          }
+            // 4.2 Criar nova categorização para .Outro
+            await pool.query(
+                `INSERT INTO thread_categorizacao
+                    (thread_id, id_categoria, id_tipo_categorizacao, ativa, data)
+                 VALUES ($1, $2, 3, true, NOW())
+                 ON CONFLICT (id_categoria, thread_id) DO UPDATE
+                   SET ativa = true,
+                       id_tipo_categorizacao = 3,
+                       data = NOW()`,
+                [threadId, idCategoriaOutro]
+            );
+        }
 
-          // 5. Apagar categoria (com cascade para keywords)
-          const result = await pool.query(
-              `DELETE FROM categoria
-              WHERE id_categoria = $1 AND id_implementacao = $2
-              RETURNING *`,
-              [id_categoria, id_implementacao]
-          );
+        // 5. Apagar categoria (cascade para keywords se existir FK)
+        const result = await pool.query(
+            `DELETE FROM categoria
+             WHERE id_categoria = $1 AND id_implementacao = $2
+             RETURNING *`,
+            [id_categoria, id_implementacao]
+        );
 
-          return reply.send({
-              message: "Categoria eliminada com sucesso e emails reclassificados para '.Outro'",
-              categoria: result.rows[0],
-              emails_reclassificados: emailsParaReclassificar.rowCount
-          });
+        return reply.send({
+            message: "Categoria eliminada com sucesso e threads reclassificadas para '.Outro'",
+            categoria: result.rows[0],
+            threads_reclassificadas: threadsParaReclassificar.rowCount
+        });
 
-      } catch (err) {
-          request.log.error(err);
-          return reply.code(500).send({ error: "Erro ao eliminar categoria" });
-      }
+    } catch (err) {
+        request.log.error(err);
+        return reply.code(500).send({ error: "Erro ao eliminar categoria" });
+    }
   });
-
 }

@@ -75,6 +75,7 @@ export default async function emailRoutes(fastify, opts) {
 
             const normalized = corpo.toLowerCase()
                 .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+                .replace(/[.,!?;:]/g, "")
                 .replace(/\s+/g, " ");
 
             let bestCategory = null;
@@ -86,7 +87,12 @@ export default async function emailRoutes(fastify, opts) {
                 let matches = [];
 
                 for (const kw of cat.keywords) {
-                    const regex = new RegExp(`\\b${kw.toLowerCase()}\\b`, "gi");
+                    const normalizedKeyword = kw.toLowerCase()
+                        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+                        .replace(/[.,!?;:]/g, "")
+                        .replace(/\s+/g, " ");
+
+                    const regex = new RegExp(`\\b${normalizedKeyword}\\b`, "gi");
                     const found = normalized.match(regex);
                     if (found) {
                         score += found.length;

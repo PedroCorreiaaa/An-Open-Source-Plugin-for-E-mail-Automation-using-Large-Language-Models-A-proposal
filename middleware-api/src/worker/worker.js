@@ -16,54 +16,79 @@ async function startWorker() {
     console.log("Worker initialized and ready to process jobs");
 
     channel.consume(QUEUE_NAME, async (msg) => {
-      if (msg !== null) {
-        const jobData = JSON.parse(msg.content.toString());
-        console.log(`Worker started processing job with data:`, jobData);
+      if (msg === null) return;
 
-        if (jobData.type === PROCESS_RAG) {
-          const { job_id, message_id, remetente, assunto, corpo, thread_id } = jobData;
+      const jobData = JSON.parse(msg.content.toString());
+      console.log("Worker started processing job with data:", jobData);
 
-          try {
-            await pool.query(
-              `UPDATE resposta_gerada SET status = 'PROCESSING' WHERE id_resposta = $1`,
-              [job_id]
-            );
-            console.log(`Job ${job_id} status updated to 'PROCESSING'`);
+      if (jobData.type === PROCESS_RAG) {
+        const { job_id, message_id, remetente, assunto, corpo, thread_id } = jobData;
 
-            const emailContent = `Remetente: ${remetente} Assunto: ${assunto} ${corpo}`;
-            const resposta = await generateResponseFromRAG(emailContent);
-            console.log(`Generated response for job ${job_id}:`, resposta);
+        try {
+          // Atualiza status do job para PROCESSING
+          await pool.query(
+            `UPDATE resposta_gerada SET status = 'PROCESSING' WHERE id_resposta = $1`,
+            [job_id]
+          );
+          console.log(`Job ${job_id} status updated to 'PROCESSING'`);
 
-            await pool.query(
-              `UPDATE resposta_gerada 
-               SET status = 'DONE', conteudo = $2
-               WHERE id_resposta = $1`,
-              [job_id, resposta]
-            );
-            await pool.query(
-              `UPDATE email
-               SET resposta_gerada = TRUE, resposta = $2
-               WHERE message_id = $1`,
-              [message_id, resposta]
-            );
+          const emailContent = `Remetente: ${remetente}\nAssunto: ${assunto}\n${corpo}`;
 
-            console.log(`Job ${job_id} completed successfully`);
-            channel.ack(msg); 
-          } catch (err) {
-            console.error(`Error processing job ${job_id}:`, err);
-            await pool.query(
-              `UPDATE resposta_gerada
-               SET status = 'ERROR', conteudo = $2
-               WHERE id_resposta = $1`,
-              [job_id, err.message]
-            );
-            channel.nack(msg, false, false); 
-            console.log(`Job ${job_id} marked as ERROR`);
+          const categoriaRes = await pool.query(
+            `
+            SELECT c.nome 
+            FROM thread_categorizacao tc
+            JOIN categoria c ON tc.id_categoria = c.id_categoria
+            WHERE tc.thread_id = $1 AND tc.ativa = TRUE
+            LIMIT 1
+            `,
+            [thread_id]
+          );
+
+          let categoriaNome;
+          if (categoriaRes.rows.length === 0) {
+            categoriaNome = ".Outro"; 
+          } else {
+            categoriaNome = categoriaRes.rows[0].nome || ".Outro";
           }
-        } else {
-          console.log("Job type not recognized:", jobData.name);
+
+          console.log(`Categoria identificada para thread ${thread_id}: ${categoriaNome}`);
+
+          const resposta = await generateResponseFromRAG(emailContent, categoriaNome);
+
+          await pool.query(
+            `UPDATE resposta_gerada 
+             SET status = 'DONE', conteudo = $2
+             WHERE id_resposta = $1`,
+            [job_id, resposta]
+          );
+
+          await pool.query(
+            `UPDATE email
+             SET resposta_gerada = TRUE, resposta = $2
+             WHERE message_id = $1`,
+            [message_id, resposta]
+          );
+
+          console.log(`Job ${job_id} completed successfully`);
           channel.ack(msg);
+        } catch (err) {
+          console.error(`Error processing job ${job_id}:`, err.message);
+
+          // Atualiza status do job para ERROR
+          await pool.query(
+            `UPDATE resposta_gerada
+             SET status = 'ERROR', conteudo = $2
+             WHERE id_resposta = $1`,
+            [job_id, err.message]
+          );
+
+          channel.nack(msg, false, false); 
+          console.log(`Job ${job_id} marked as ERROR`);
         }
+      } else {
+        console.log("Job type not recognized:", jobData.type);
+        channel.ack(msg);
       }
     }, { noAck: false });
 
@@ -74,11 +99,10 @@ async function startWorker() {
       })
       .catch(err => {
         console.error("Error connecting to the database:", err.message);
-        console.error("Stack trace:", err.stack);
       });
 
   } catch (err) {
-    console.error("Error initializing RabbitMQ worker:", err);
+    console.error("Error initializing RabbitMQ worker:", err.message);
   }
 }
 
