@@ -1,127 +1,187 @@
-CREATE TABLE implementacao (
-    id_implementacao SERIAL PRIMARY KEY,
-    email VARCHAR(255) UNIQUE,
-    plataforma VARCHAR(100)
+-- Tabelas existentes e alterações
+
+CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA public;
+
+CREATE FUNCTION public.inserir_categoria_outro() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    INSERT INTO categoria (id_implementacao, nome)
+    VALUES (NEW.id_implementacao, '.Outro');
+    RETURN NEW;
+END;
+$$;
+
+CREATE TABLE public.categoria (
+    id_categoria integer NOT NULL,
+    id_implementacao integer NOT NULL,
+    nome character varying(255),
+    questao character varying,
+    para_que_serve character varying
 );
 
-CREATE TABLE categoria (
-    id_categoria SERIAL PRIMARY KEY,
-    id_implementacao INTEGER NOT NULL,
-    nome VARCHAR(255),
+CREATE SEQUENCE public.categoria_id_categoria_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
 
-    CONSTRAINT fk_categoria_implementacao
-        FOREIGN KEY (id_implementacao)
-        REFERENCES implementacao(id_implementacao)
+ALTER SEQUENCE public.categoria_id_categoria_seq OWNED BY public.categoria.id_categoria;
+
+CREATE TABLE public.email (
+    message_id text NOT NULL,
+    id_implementacao integer NOT NULL,
+    thread_id text NOT NULL,
+    remetente character varying(255),
+    corpo text,
+    resposta text,
+    categorizado boolean DEFAULT false,
+    resposta_gerada boolean DEFAULT false,
+    resposta_validada boolean DEFAULT false,
+    respondido boolean DEFAULT false
 );
 
-
-CREATE TABLE keyword (
-    id_keyword SERIAL PRIMARY KEY,
-    id_categoria INTEGER NOT NULL,
-    keyword VARCHAR(255),
-
-    CONSTRAINT fk_keyword_categoria
-        FOREIGN KEY (id_categoria)
-        REFERENCES categoria(id_categoria)
+CREATE TABLE public.implementacao (
+    id_implementacao integer NOT NULL,
+    email character varying(255),
+    plataforma character varying(100)
 );
 
-CREATE TABLE thread (
-    thread_id TEXT PRIMARY KEY,
-    id_implementacao INTEGER NOT NULL,
-    assunto VARCHAR(500),
+CREATE SEQUENCE public.implementacao_id_implementacao_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
 
-    CONSTRAINT fk_thread_implementacao
-        FOREIGN KEY (id_implementacao)
-        REFERENCES implementacao(id_implementacao)
+ALTER SEQUENCE public.implementacao_id_implementacao_seq OWNED BY public.implementacao.id_implementacao;
+
+CREATE TABLE public.keyword (
+    id_keyword integer NOT NULL,
+    id_categoria integer NOT NULL,
+    keyword character varying(255)
 );
 
+CREATE SEQUENCE public.keyword_id_keyword_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
 
-CREATE TABLE tipo_categorizacao (
-    id_tipo_categorizacao SERIAL PRIMARY KEY,
-    descricao VARCHAR(255)
+ALTER SEQUENCE public.keyword_id_keyword_seq OWNED BY public.keyword.id_keyword;
+
+CREATE TABLE public.pdf_documents (
+    pdf_id integer NOT NULL,
+    filename character varying(255) NOT NULL,
+    descricao text,
+    data_insercao timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    categoria_nome character varying(255) NOT NULL
 );
 
+CREATE SEQUENCE public.pdf_documents_pdf_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
 
-INSERT INTO tipo_categorizacao (id_tipo_categorizacao, descricao)
-VALUES 
-    (1, 'Automática'),
-    (2, 'Manual');
+ALTER SEQUENCE public.pdf_documents_pdf_id_seq OWNED BY public.pdf_documents.pdf_id;
 
-
-CREATE TABLE email (
-    message_id TEXT PRIMARY KEY,
-    id_implementacao INTEGER NOT NULL,
-    thread_id TEXT NOT NULL,
-    remetente VARCHAR(255),
-    corpo TEXT,
-    resposta TEXT,
-    categorizado BOOLEAN DEFAULT FALSE,
-    resposta_gerada BOOLEAN DEFAULT FALSE,
-    resposta_validada BOOLEAN DEFAULT FALSE,
-    respondido BOOLEAN DEFAULT FALSE,
-
-    CONSTRAINT fk_email_implementacao
-        FOREIGN KEY (id_implementacao)
-        REFERENCES implementacao(id_implementacao),
-
-    CONSTRAINT fk_email_thread
-        FOREIGN KEY (thread_id)
-        REFERENCES thread(thread_id)
+CREATE TABLE public.rag_chunks (
+    chunk_id integer NOT NULL,
+    pdf_id integer NOT NULL,
+    content text NOT NULL,
+    page_num integer,
+    data_insercao timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    embedding public.vector(768)
 );
 
+CREATE SEQUENCE public.rag_chunks_chunk_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
 
-CREATE TABLE thread_categorizacao (
-    id_categoria INTEGER NOT NULL,
-    thread_id TEXT NOT NULL,
-    id_tipo_categorizacao INTEGER,
-    keywords TEXT,
-    data TIMESTAMP,
-    ativa BOOLEAN DEFAULT TRUE,
+ALTER SEQUENCE public.rag_chunks_chunk_id_seq OWNED BY public.rag_chunks.chunk_id;
 
-    PRIMARY KEY (id_categoria, thread_id),
-
-    CONSTRAINT fk_threadcat_categoria
-        FOREIGN KEY (id_categoria)
-        REFERENCES categoria(id_categoria),
-
-    CONSTRAINT fk_threadcat_thread
-        FOREIGN KEY (thread_id)
-        REFERENCES thread(thread_id),
-
-    CONSTRAINT fk_threadcat_tipo
-        FOREIGN KEY (id_tipo_categorizacao)
-        REFERENCES tipo_categorizacao(id_tipo_categorizacao)
+CREATE TABLE public.resposta_gerada (
+    id_resposta integer NOT NULL,
+    message_id text NOT NULL,
+    id_tipo_resposta integer NOT NULL,
+    conteudo text,
+    status character varying(100),
+    data_criacao timestamp without time zone,
+    data_validacao timestamp without time zone
 );
 
+CREATE SEQUENCE public.resposta_gerada_id_resposta_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
 
-CREATE TABLE tipo_resposta (
-    id_tipo_resposta SERIAL PRIMARY KEY,
-    descricao VARCHAR(255)
+ALTER SEQUENCE public.resposta_gerada_id_resposta_seq OWNED BY public.resposta_gerada.id_resposta;
+
+CREATE TABLE public.thread (
+    thread_id text NOT NULL,
+    id_implementacao integer NOT NULL,
+    assunto character varying(500)
 );
 
+CREATE TABLE public.thread_categorizacao (
+    id_categoria integer NOT NULL,
+    thread_id text NOT NULL,
+    id_tipo_categorizacao integer,
+    keywords text,
+    data timestamp without time zone,
+    ativa boolean DEFAULT true
+);
+
+CREATE TABLE public.tipo_categorizacao (
+    id_tipo_categorizacao integer NOT NULL,
+    descricao character varying(255)
+);
+
+CREATE SEQUENCE public.tipo_categorizacao_id_tipo_categorizacao_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+ALTER SEQUENCE public.tipo_categorizacao_id_tipo_categorizacao_seq OWNED BY public.tipo_categorizacao.id_tipo_categorizacao;
+
+CREATE TABLE public.tipo_resposta (
+    id_tipo_resposta integer NOT NULL,
+    descricao character varying(255)
+);
+
+CREATE SEQUENCE public.tipo_resposta_id_tipo_resposta_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+ALTER SEQUENCE public.tipo_resposta_id_tipo_resposta_seq OWNED BY public.tipo_resposta.id_tipo_resposta;
+
+-- Inserir dados padrão
 INSERT INTO tipo_resposta (id_tipo_resposta, descricao)
 VALUES (1, 'RAG');
 
-
-CREATE TABLE resposta_gerada (
-    id_resposta SERIAL PRIMARY KEY,
-    message_id TEXT NOT NULL,
-    id_tipo_resposta INTEGER NOT NULL,
-    conteudo TEXT,
-    status VARCHAR(100),
-    data_criacao TIMESTAMP,
-    data_validacao TIMESTAMP,
-
-    CONSTRAINT fk_resposta_email
-        FOREIGN KEY (message_id)
-        REFERENCES email(message_id),
-
-    CONSTRAINT fk_resposta_tipo
-        FOREIGN KEY (id_tipo_resposta)
-        REFERENCES tipo_resposta(id_tipo_resposta)
-);
-
-
+-- Função para inserção automática de categoria ".Outro"
 CREATE OR REPLACE FUNCTION inserir_categoria_outro()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -132,6 +192,79 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER trigger_inserir_categoria_outro
-AFTER INSERT ON implementacao
+AFTER INSERT ON public.implementacao
 FOR EACH ROW
-EXECUTE FUNCTION inserir_categoria_outro();
+EXECUTE FUNCTION public.inserir_categoria_outro();
+
+-- Adicionando constraints de chave estrangeira
+
+ALTER TABLE ONLY public.categoria
+    ADD CONSTRAINT fk_categoria_implementacao FOREIGN KEY (id_implementacao) REFERENCES public.implementacao(id_implementacao);
+
+ALTER TABLE ONLY public.rag_chunks
+    ADD CONSTRAINT fk_chunk_pdf FOREIGN KEY (pdf_id) REFERENCES public.pdf_documents(pdf_id) ON UPDATE CASCADE ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.email
+    ADD CONSTRAINT fk_email_implementacao FOREIGN KEY (id_implementacao) REFERENCES public.implementacao(id_implementacao);
+
+ALTER TABLE ONLY public.email
+    ADD CONSTRAINT fk_email_thread FOREIGN KEY (thread_id) REFERENCES public.thread(thread_id);
+
+ALTER TABLE ONLY public.keyword
+    ADD CONSTRAINT fk_keyword_categoria FOREIGN KEY (id_categoria) REFERENCES public.categoria(id_categoria) ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.resposta_gerada
+    ADD CONSTRAINT fk_resposta_email FOREIGN KEY (message_id) REFERENCES public.email(message_id);
+
+ALTER TABLE ONLY public.resposta_gerada
+    ADD CONSTRAINT fk_resposta_tipo FOREIGN KEY (id_tipo_resposta) REFERENCES public.tipo_resposta(id_tipo_resposta);
+
+ALTER TABLE ONLY public.thread
+    ADD CONSTRAINT fk_thread_implementacao FOREIGN KEY (id_implementacao) REFERENCES public.implementacao(id_implementacao);
+
+ALTER TABLE ONLY public.thread_categorizacao
+    ADD CONSTRAINT fk_threadcat_categoria FOREIGN KEY (id_categoria) REFERENCES public.categoria(id_categoria) ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.thread_categorizacao
+    ADD CONSTRAINT fk_threadcat_thread FOREIGN KEY (thread_id) REFERENCES public.thread(thread_id);
+
+ALTER TABLE ONLY public.thread_categorizacao
+    ADD CONSTRAINT fk_threadcat_tipo FOREIGN KEY (id_tipo_categorizacao) REFERENCES public.tipo_categorizacao(id_tipo_categorizacao);
+
+-- Definindo chaves primárias
+
+ALTER TABLE ONLY public.categoria
+    ADD CONSTRAINT categoria_pkey PRIMARY KEY (id_categoria);
+
+ALTER TABLE ONLY public.email
+    ADD CONSTRAINT email_pkey PRIMARY KEY (message_id);
+
+ALTER TABLE ONLY public.implementacao
+    ADD CONSTRAINT implementacao_email_key UNIQUE (email);
+
+ALTER TABLE ONLY public.implementacao
+    ADD CONSTRAINT implementacao_pkey PRIMARY KEY (id_implementacao);
+
+ALTER TABLE ONLY public.keyword
+    ADD CONSTRAINT keyword_pkey PRIMARY KEY (id_keyword);
+
+ALTER TABLE ONLY public.pdf_documents
+    ADD CONSTRAINT pdf_documents_pkey PRIMARY KEY (pdf_id);
+
+ALTER TABLE ONLY public.rag_chunks
+    ADD CONSTRAINT rag_chunks_pkey PRIMARY KEY (chunk_id);
+
+ALTER TABLE ONLY public.resposta_gerada
+    ADD CONSTRAINT resposta_gerada_pkey PRIMARY KEY (id_resposta);
+
+ALTER TABLE ONLY public.thread_categorizacao
+    ADD CONSTRAINT thread_categorizacao_pkey PRIMARY KEY (id_categoria, thread_id);
+
+ALTER TABLE ONLY public.thread
+    ADD CONSTRAINT thread_pkey PRIMARY KEY (thread_id);
+
+ALTER TABLE ONLY public.tipo_categorizacao
+    ADD CONSTRAINT tipo_categorizacao_pkey PRIMARY KEY (id_tipo_categorizacao);
+
+ALTER TABLE ONLY public.tipo_resposta
+    ADD CONSTRAINT tipo_resposta_pkey PRIMARY KEY (id_tipo_resposta);
